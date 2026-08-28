@@ -12,23 +12,29 @@ class Settings(BaseSettings):
 
     LLM_MODEL=qwen-plus
     LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-    LLM_API_KEY=sk-983bea5e73584a92950148b7df36a4b0
+    LLM_API_KEY=sk-xxx
 
-    COMMERCE_API_BASE_URL=http://192.168.200.133:18081
+    TRAVEL_API_BASE_URL=http://127.0.0.1:8000/api/v1
+    TRAVEL_API_USER_HEADER=X-User-Id
+    TRAVEL_API_DEFAULT_USER_ID=10001
 
-    DATABASE_URL=mysql+aiomysql://root:hzk686868@192.168.200.133:3306/customer_service?charset=utf8mb4
+    DATABASE_URL=mysql+aiomysql://root:123321@127.0.0.1:3306/customer_service?charset=utf8mb4
+    WORK_ORDER_DATABASE_URL=mysql+aiomysql://root:123321@127.0.0.1:3306/work_orders?charset=utf8mb4
 
     APP_HOST=0.0.0.0
     APP_PORT=18082
     """
 
-    llm_model: str  # 模型名字
-    llm_base_url: str  # 模型服务平台的地址
-    llm_api_key: str  # 模型服务平台的api_key
-    commerce_api_base_url: str  # 中台服务的地址
-    database_url: str  # AI应用对应的数据库地址
-    app_host: str  # AI应用的访问域名
-    app_port: int  # AI 应用的端口
+    llm_model: str
+    llm_base_url: str
+    llm_api_key: str
+    travel_api_base_url: str
+    travel_api_user_header: str = "X-User-Id"
+    travel_api_default_user_id: str = "10001"
+    database_url: str
+    work_order_database_url: str
+    app_host: str
+    app_port: int
 
     # 实例化SettingsConfigDict对象一定要有变量接收  并且变量的名字一定要叫model_config
     model_config = SettingsConfigDict(env_file=ENV_FILE_PATH, env_file_encoding="utf-8",

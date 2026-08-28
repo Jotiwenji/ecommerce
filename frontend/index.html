@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>掌柜小二 · 旅游智能客服</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🧭</span>
+        <div>
+          <h1>旅游智能客服</h1>
+          <p class="subtitle">掌柜小二 · 三轨道对话引擎</p>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="field">
+          <span>用户ID</span>
+          <input id="senderId" type="text" inputmode="numeric" placeholder="如 13" />
+        </label>
+        <label class="toggle">
+          <input id="streamToggle" type="checkbox" checked />
+          <span>SSE 流式</span>
+        </label>
+        <button id="applyUser" class="btn">应用</button>
+        <button id="newSession" class="btn ghost">新会话</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="chat-col">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div id="statusbar" class="statusbar" hidden></div>
+        <form id="composer" class="composer">
+          <input id="input" type="text" autocomplete="off" placeholder="请输入消息，例如：帮我查北京8月30日入住9月1日离店的酒店" />
+          <button type="submit" class="btn send">发送</button>
+        </form>
+      </section>
+
+      <aside class="side-col">
+        <div class="side-head">
+          <h2>我的订单</h2>
+          <button id="refreshOrders" class="btn ghost sm">刷新</button>
+        </div>
+        <p class="side-hint">点击"发送卡片"可将该订单以对象消息发给客服，演示卡片自动填槽（AC-20）。</p>
+        <ul id="orderList" class="order-list"></ul>
+      </aside>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

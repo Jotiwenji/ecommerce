@@ -13,7 +13,8 @@ class FlowExecutor:
     async def executor_flow(self,
                             flows_list: FlowsList,
                             action_runner: ActionRunner,
-                            state: DialogueState) -> list[BotMessage]:
+                            state: DialogueState,
+                            event_sink=None) -> list[BotMessage]:
 
         """
          职责：根据processor修改后的state 推进流程(业务流程、系统流程)
@@ -21,6 +22,7 @@ class FlowExecutor:
             flows_list:
             action_runner:
             state:
+            event_sink: 可选的流式事件回调
 
         Returns:
 
@@ -35,14 +37,44 @@ class FlowExecutor:
 
             # 2. 判断action_call有值 判断action_name,如果action_name是action_xxx才调用action 如果action_name是action_response(不用管) 如果action_name是action_listen
             if action_call.action_name == "action_listen":
+                # action_listen 也必须把指针推到下一步（通常是 end），
+                # 否则下一轮会再次停在 listen 反复 break，系统流程无法结束。
+                if action_call.advance_step_after:
+                    self._advance_current_action_step(flows_list, state)
                 break
             else:
-                action_result = await action_runner.run(action_call, state)
+                if event_sink is not None:
+                    from atguigu.infrastructure.streaming import progress_event
+                    evt = progress_event(action_call.action_name)
+                    if evt is not None:
+                        event_sink(evt)
+
+                from atguigu.task.action.context import action_event_sink
+                token = action_event_sink.set(event_sink)
+                try:
+                    action_result = await action_runner.run(action_call, state)
+                finally:
+                    action_event_sink.reset(token)
 
                 final_messages.extend(action_result.messages)
                 state.set_slots(action_result.slots)
 
+                # action 执行并写回槽位后，再推进该 action 步骤，
+                # 让其 next 上依赖 action 输出的条件分支读到最新槽位
+                if action_call.advance_step_after:
+                    self._advance_current_action_step(flows_list, state)
+
         return final_messages
+
+    def _advance_current_action_step(self,
+                                     flows_list: FlowsList,
+                                     state: DialogueState):
+        current_task = state.current_task()
+        if current_task is None:
+            return
+        flow = flows_list.get_flow_by_flow_id(current_task.flow_id)
+        step = flow.get_step_by_step_id(current_task.step_id)
+        self._advance_flow_step(step, state)
 
     def _advance_flow_util_action(self,
                                   flows_list: FlowsList,
@@ -176,16 +208,14 @@ class FlowExecutor:
     def _run_action_step(self,
                          step: ActionFlowStep,
                          state) -> ActionCall:
-        # 1. 推进下一步
-        self._advance_flow_step(step, state)
-
-        # 2. 构建Action
+        # 1. 构建Action（不再提前推进步骤；等 action 执行并写回槽位后，由外层循环再推进，
+        #    这样该步骤 next 上依赖 action 输出槽位的条件分支才能读到最新值）
         action_kwargs = step.args
         if isinstance(step.args, str):
             action_kwargs = asdict(state.activated_system_task)['response']  # 字典 就可以将业务侧定义的槽位描述 带出去
 
-        # 3. 返回Action
-        return ActionCall(action_name=step.action, action_kwargs=action_kwargs)
+        # 2. 返回Action（标记执行后推进）
+        return ActionCall(action_name=step.action, action_kwargs=action_kwargs, advance_step_after=True)
 
     def _run_collect_step(self,
                           step: CollectFlowStep,
@@ -258,11 +288,8 @@ class FlowExecutor:
             return
 
         # 2. 利用点击的卡片
-        excepted_slots_mapping = {
-            "order": "order_number",
-            "product": "product_id"
-        }
-        excepted_slots = excepted_slots_mapping.get(state.focused_object.type)
+        from atguigu.domain.object_slots import OBJECT_TYPE_TO_SLOT
+        excepted_slots = OBJECT_TYPE_TO_SLOT.get(state.focused_object.type)
 
         # 3. 当前业务流程的这一步需要的槽位名是否和期望的槽位一致
         if step.slot_name == excepted_slots and not state.activated_task.slots.get(step.slot_name):

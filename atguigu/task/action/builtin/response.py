@@ -82,15 +82,17 @@ class ActionResponse(Action):
         # 1. 实例化提示词模版对象
         prompt_template = PromptTemplate.from_template(template=prompt)
 
-        # 2. 构建chain
-        chain = prompt_template | llm_client | StrOutputParser()
+        # 2. 获取 event_sink（通过上下文变量传递）
+        from atguigu.task.action.context import action_event_sink
+        event_sink = action_event_sink.get()
 
-        # 3. 调用chain
-        rewritten = await chain.ainvoke({
+        # 3. 流式调用LLM（自动过滤think内容）
+        from atguigu.infrastructure.llm_streaming import stream_llm_text
+        rewritten = await stream_llm_text(prompt_template, {
             "history": ChatHistoryBuilder.build(state.current_session().turns[-5:]),
             "user_message": ChatHistoryBuilder.build_user_message(state.pending_turn.user_message),
             "current_response": rendered_text
-        })
+        }, event_sink=event_sink)
 
         # 4. 返回
         return rewritten

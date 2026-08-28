@@ -1,10 +1,13 @@
+import json
 import uuid
 from dataclasses import dataclass
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from fastapi.responses import StreamingResponse
 
 from atguigu.api.schemas import ChatRequest, ChatResponse, ChatBotMessage, ChatObject, ChatHistoryResponse
 from atguigu.domain.messages import UserMessage, ProcessResult, MessageType, FocusedObject
 from atguigu.api.dependencies import DialogueServiceDep
+from atguigu.task.action.customer.travel_client import travel_api
 
 router = APIRouter()
 
@@ -58,6 +61,18 @@ async def chat_endpoint(chat_request: ChatRequest,
     return chat_response
 
 
+@router.post("/api/chat/stream")
+async def chat_stream_endpoint(chat_request: ChatRequest,
+                               service: DialogueServiceDep):
+    user_message = _build_user_message(chat_request)
+
+    async def event_generator():
+        async for stream_event in service.process_message_stream(user_message):
+            yield f"data: {json.dumps(stream_event.to_dict(), ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 def _build_user_message(chat_request: ChatRequest) -> UserMessage:
     return UserMessage(
         sender_id=chat_request.sender_id,
@@ -96,3 +111,33 @@ async def chat_history_endpoint(sender_id: str,
     chat_history_messages = await service.get_chat_history(sender_id)
 
     return ChatHistoryResponse(sender_id=sender_id, messages=chat_history_messages)
+
+
+@router.post("/api/chat/reset")
+async def chat_reset_endpoint(service: DialogueServiceDep,
+                              sender_id: str = Query(..., description="数字用户ID")):
+    """清空该用户卡住的活跃流程（保留历史），供前端'新会话'按钮调用。"""
+    await service.reset_state(sender_id)
+    return {"sender_id": sender_id, "reset": True}
+
+
+@router.get("/api/orders")
+async def orders_proxy_endpoint(sender_id: str = Query(..., description="数字用户ID"),
+                                page_size: int = Query(20, alias="pageSize", ge=1, le=50)):
+    """代理转发中台订单列表，供前端'我的订单'侧栏点击发送卡片。"""
+    result = await travel_api.query_orders(sender_id=sender_id, pageSize=page_size)
+    orders = result.get("list", []) if isinstance(result, dict) else []
+    return {
+        "sender_id": sender_id,
+        "orders": [
+            {
+                "orderId": o.get("orderId"),
+                "orderNo": o.get("orderNo"),
+                "orderTypeCode": o.get("orderTypeCode"),
+                "statusCode": o.get("statusCode"),
+                "payableAmount": o.get("payableAmount"),
+                "createdAt": o.get("createdAt"),
+            }
+            for o in orders
+        ]
+    }

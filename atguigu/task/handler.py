@@ -22,11 +22,13 @@ class TaskHandler:
 
     async def handle(self,
                      state: DialogueState,
-                     commands: list[Command]) -> list[BotMessage]:
+                     commands: list[Command],
+                     event_sink=None) -> list[BotMessage]:
         """
         Args:
             state:
             commands:
+            event_sink: 可选的流式事件回调
 
         Returns:
 
@@ -36,7 +38,8 @@ class TaskHandler:
         self._command_processor.process_commands(commands, state, self.flows_list)
 
         # 2. 利用流程推进器推荐流程
-        bot_messages = await self._flow_executor.executor_flow(self.flows_list, self._action_runner, state)
+        bot_messages = await self._flow_executor.executor_flow(self.flows_list, self._action_runner, state,
+                                                                event_sink=event_sink)
 
         # 3. 返回机器人回复的消息
         return bot_messages

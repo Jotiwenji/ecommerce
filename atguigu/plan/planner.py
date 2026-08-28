@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import asdict
 from typing import Any
 from langchain_core.prompts import PromptTemplate
@@ -17,12 +18,14 @@ class TurnPlanner:
     async def predict(self,
                       state: DialogueState,
                       flows_list: FlowsList,
-                      knowledge_intents: dict[str, KnowledgeIntent]
+                      knowledge_intents: dict[str, KnowledgeIntent],
+                      event_sink=None
                       ) -> TurnPlan:
         """
         职责：调用LLM做路由分析，判断当前任务该用哪一条轨道处理
         Args:
             state:  用户对话的完整状态
+            event_sink: 可选的流式事件回调
 
         Returns:
             TurnPlan:轮次结果的结构化对象
@@ -32,7 +35,7 @@ class TurnPlanner:
         prompt_inputs: dict[str, Any] = self._build_prompt_inputs(state, flows_list,knowledge_intents=knowledge_intents)
 
         # 2. 格式化模板以及调用LLM
-        llm_result = await self._invoke(prompt_inputs)
+        llm_result = await self._invoke(prompt_inputs, event_sink=event_sink)
 
         return llm_result
 
@@ -75,23 +78,21 @@ class TurnPlanner:
             "focused_object_json": focused_object_json_str,
             "available_flows_json": available_flows_json_str,
             "knowledge_intents_json": knowledge_intents_json_str,
+            "current_date": time.strftime("%Y-%m-%d"),
         }
 
-    async def _invoke(self, prompt_inputs: dict[str, Any]) -> TurnPlan:
+    async def _invoke(self, prompt_inputs: dict[str, Any], event_sink=None) -> TurnPlan:
         # 1. 获取提示词模版中的内容
         prompt_template_str = load_prompt_template("turn_plan")
 
         # 2. 格式化提示词模版中的变量
         prompt_template = PromptTemplate.from_template(template=prompt_template_str, template_format="jinja2")
 
-        # 3. LCEL方式通过链来定义
-        # (json格式的字典对象)
-        chain = prompt_template | llm_client | JsonOutputParser()
+        # 3. 流式调用LLM（自动过滤think内容）
+        from atguigu.infrastructure.llm_streaming import stream_llm_json
+        llm_result_dict = await stream_llm_json(prompt_template, prompt_inputs, event_sink=event_sink)
 
-        # 4. 执行链   # 1.会依次执行三次invoke. prompt_template.invoke("")--->最终提示词 |   llm_client.invoke(最终提示词)--->json格式字符串  | JsonOutputParser().invoke(son格式字符串)----字典对象
-        llm_result_dict = await chain.ainvoke(prompt_inputs)
-
-        # 5. 返回
+        # 4. 返回
         return TurnPlan.from_dict(llm_result_dict)
 
 

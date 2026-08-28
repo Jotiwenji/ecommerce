@@ -82,6 +82,8 @@ class DialogueState:
     sessions: list[Session] = field(default_factory=list)
     current_session_id: str | None = None
     pending_turn: Turn | None = None  # 缓冲区：后续引擎操作的轮次对象不在是Turn 而是pending_turn 可以保证轮次信息入库的完整性
+    # 会话级搜索记忆：{kind: [有序ID,...]}，流程结束后仍存活，用于"第N家"序号下钻解析
+    last_search_results: dict[str, list] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,7 +95,8 @@ class DialogueState:
             "focused_object": FocusedObject.to_dict(self.focused_object) if self.focused_object is not None else None,
             "sessions": [Session.to_dict(session) for session in self.sessions],
             "current_session_id": self.current_session_id,
-            "pending_turn": Turn.to_dict(self.pending_turn) if self.pending_turn is not None else None
+            "pending_turn": Turn.to_dict(self.pending_turn) if self.pending_turn is not None else None,
+            "last_search_results": self.last_search_results
         }
 
     @classmethod
@@ -109,7 +112,8 @@ class DialogueState:
                                                                                   'focused_object'] is not None else None,
             sessions=[Session.from_dict(session_dict) for session_dict in data['sessions']],
             current_session_id=data['current_session_id'],
-            pending_turn=Turn.from_dict(data['pending_turn']) if data['pending_turn'] is not None else None
+            pending_turn=Turn.from_dict(data['pending_turn']) if data['pending_turn'] is not None else None,
+            last_search_results=data.get('last_search_results', {})
         )
 
     # ===================================（业务、系统）流程任务相关==================================
@@ -222,6 +226,31 @@ class DialogueState:
     def remove_slot(self, slot_name: str):
         if self.activated_task is not None:
             self.activated_task.slots.pop(slot_name)
+
+    # ===================================（会话级搜索记忆）相关==================================
+
+    def record_search(self, kind: str, ids: list, params: dict | None = None):
+        """记录本轮某类产品的有序ID列表及搜索参数（日期等），供后续"第N家"下钻复用。"""
+        self.last_search_results[kind] = {"ids": list(ids), "params": dict(params or {})}
+
+    def get_search_ids(self, kind: str) -> list:
+        return (self.last_search_results.get(kind) or {}).get("ids", [])
+
+    def get_search_params(self, kind: str) -> dict:
+        return (self.last_search_results.get(kind) or {}).get("params", {})
+
+    def resolve_ordinal(self, kind: str, value: Any) -> Any:
+        """把"第N家"的序号N(1-based)解析为会话缓存中的真实ID；无法解析时返回None。"""
+        if value is None:
+            return None
+        try:
+            index = int(str(value).strip())
+        except (ValueError, TypeError):
+            return None
+        ids = self.get_search_ids(kind)
+        if 1 <= index <= len(ids):
+            return ids[index - 1]
+        return None
 
 
     # ===================================（会话session）相关==================================

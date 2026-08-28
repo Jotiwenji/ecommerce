@@ -85,7 +85,11 @@ class ChatHistoryBuilder:
 
         """
         id = object.id
-        label = "订单" if object.type == "order" else "商品"
+        label_map = {
+            "order": "订单", "hotel": "酒店", "scenic_spot": "景点",
+            "flight": "航班", "train": "火车", "bus": "汽车",
+        }
+        label = label_map.get(object.type, object.type)
         title = object.title
         attributes_str = "|".join([f"{k}={v}" for k, v in object.attributes.items()])
 

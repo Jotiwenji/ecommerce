@@ -47,14 +47,43 @@ Task 对象示例：
 - 同一轮同时包含业务意图和槽位值时，先输出 `start_flow`，再输出一个 `set_slots`；
 多个已知槽位合并到同一个 `set_slots.slots` 对象。
 - 只提取用户明确表达的值，禁止臆造用户没有提供的槽位值。
-- 示例：“我想查询订单A20260408001的物流信息”必须输出：
+- 城市名称直接填入对应的 areaId/departureAreaId/arrivalAreaId 槽位（如”北京”、”上海”），不需要转换为数字ID。
+- 日期需归一化为 YYYY-MM-DD 格式。今天是 {{ current_date }}，”明天”、”后天”等相对日期需转换。
+- transportType 只允许 flight（机票）、train（火车票）、bus（汽车票）三个值。
+- 当用户用”第N家/第N个/第N班/最后一个”等序号引用上一次列表中的某一项，想看它的详情/房型/票种/舱位时：用对应产品的详情流程 start_flow，并把序号N填入对应的序号槽位——酒店用 hotelIndex、景点用 scenicIndex、交通班次用 transportIndex、订单用 orderIndex（值为纯数字字符串）。不要把这些序号填进 hotelId/scenicSpotId/departureId/orderId 等真实ID槽位。
+- 当用户直接给出订单号字符串（如 ORD0000000013）查看某订单详情时，用 order_query 的 start_flow 并 set_slots orderId 为该字符串。
+
+示例1：”帮我查北京8月30日入住9月1日离店的酒店”
 {
-    "commands":
-            [
-                {"command": "start_flow", "flow": "logistics_tracking"},
-                {"command": "set_slots", "slots": {"order_number": "A20260408001"}}
-            ]
- }
+    “commands”: [
+        {“command”: “start_flow”, “flow”: “hotel_search”},
+        {“command”: “set_slots”, “slots”: {“areaId”: “北京”, “checkInDate”: “2026-08-30”, “checkOutDate”: “2026-09-01”}}
+    ]
+}
+
+示例4：（上一轮已返回酒店列表）”帮我看看第一家酒店的房型”
+{
+    “commands”: [
+        {“command”: “start_flow”, “flow”: “hotel_search”},
+        {“command”: “set_slots”, “slots”: {“hotelIndex”: “1”}}
+    ]
+}
+
+示例2：”查明天北京到上海的机票”
+{
+    “commands”: [
+        {“command”: “start_flow”, “flow”: “transport_search”},
+        {“command”: “set_slots”, “slots”: {“transportType”: “flight”, “departureAreaId”: “北京”, “arrivalAreaId”: “上海”, “departureDate”: “2026-08-29”}}
+    ]
+}
+
+示例3：”我要退款，订单号12345”
+{
+    “commands”: [
+        {“command”: “start_flow”, “flow”: “refund_request”},
+        {“command”: “set_slots”, “slots”: {“orderId”: “12345”}}
+    ]
+}
 可用 flows：
 {{ available_flows_json }}
 
@@ -84,6 +113,9 @@ Chitchat 对象示例：
 ---
 
 ## 当前状态
+
+### 当前日期
+{{ current_date }}
 
 ### Active Task
 {{ active_task_json }}

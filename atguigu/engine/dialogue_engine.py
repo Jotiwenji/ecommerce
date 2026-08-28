@@ -34,9 +34,11 @@ class DialogueEngine:
 
     async def process_message(self,
                               user_message: UserMessage,
-                              state: DialogueState) -> ProcessResult:
+                              state: DialogueState,
+                              event_sink=None) -> ProcessResult:
         """
         :param dialogue_state:
+        :param event_sink: 可选的流式事件回调
         :return:
         """
 
@@ -51,13 +53,15 @@ class DialogueEngine:
         if user_message.type is MessageType.TEXT:
             bot_messages: list[BotMessage] = await self._process_text_message(state,
                                                                               flows_list=self._task_handler.flows_list,
-                                                                              knowledge_intents=self._knowledge_handler.knowledge_intents
+                                                                              knowledge_intents=self._knowledge_handler.knowledge_intents,
+                                                                              event_sink=event_sink
                                                                               )
 
         # 3.2 对象消息类型
         else:
             state.set_focused_object(user_message.object)
-            bot_messages = await self._process_object_message(user_message.object, state, self._task_handler.flows_list)
+            bot_messages = await self._process_object_message(user_message.object, state, self._task_handler.flows_list,
+                                                               event_sink=event_sink)
 
         # 4. 轮次的提交
         state.pending_turn.bot_messages = bot_messages
@@ -112,30 +116,45 @@ class DialogueEngine:
                                     state: DialogueState,
                                     *,
                                     flows_list: FlowsList,
-                                    knowledge_intents: dict[str, KnowledgeIntent]) -> list[BotMessage]:
+                                    knowledge_intents: dict[str, KnowledgeIntent],
+                                    event_sink=None) -> list[BotMessage]:
 
         # 1. 利用轮次规划器进行路由判断
-        turn_plan = await self._planner.predict(state, flows_list, knowledge_intents)
+        if event_sink is not None:
+            from atguigu.infrastructure.streaming import stage_event
+            event_sink(stage_event("正在分析您的意图..."))
+
+        turn_plan = await self._planner.predict(state, flows_list, knowledge_intents, event_sink=event_sink)
 
         # 2. 利用轮次校验器校验轮次的结果
         validated = self._validator.validate(turn_plan, state, flows_list, knowledge_intents)
 
         # 3. 如果校验不通过，需要意图澄清器，澄清
         if not validated.valid:
-            return await self._responder.respond(validated.reason, state)
+            return await self._responder.respond(validated.reason, state, event_sink=event_sink)
 
         # 4. 如果校验通过，找到对应的三条轨道的处理器处理
         if turn_plan.task is not None:
-            return await self._task_handler.handle(state, commands=turn_plan.task.commands)
+            if event_sink is not None:
+                from atguigu.infrastructure.streaming import stage_event
+                event_sink(stage_event("正在处理业务请求..."))
+            return await self._task_handler.handle(state, commands=turn_plan.task.commands, event_sink=event_sink)
         elif turn_plan.knowledge is not None:
-            return await self._knowledge_handler.handle(state,turn_plan.knowledge.intents)
+            if event_sink is not None:
+                from atguigu.infrastructure.streaming import stage_event
+                event_sink(stage_event("正在查询知识库..."))
+            return await self._knowledge_handler.handle(state, turn_plan.knowledge.intents, event_sink=event_sink)
         else:
-            return await self._chitchat_handler.handle(turn_plan.chitchat.chat, state)
+            if event_sink is not None:
+                from atguigu.infrastructure.streaming import stage_event
+                event_sink(stage_event("正在生成回复..."))
+            return await self._chitchat_handler.handle(turn_plan.chitchat.chat, state, event_sink=event_sink)
 
     async def _process_object_message(self,
                                       object_message: FocusedObject,
                                       state: DialogueState,
-                                      flows_list: FlowsList
+                                      flows_list: FlowsList,
+                                      event_sink=None
                                       ) -> list[BotMessage]:
 
         # 1. 尝试构建SetSlotsCommand
@@ -143,31 +162,25 @@ class DialogueEngine:
 
         # 2. 当前有业务流程有且业务流程某一步正好需要点击的卡片
         if command:
-            return await self._task_handler.handle(state=state, commands=[command])  # 继续把流程往前推
+            return await self._task_handler.handle(state=state, commands=[command], event_sink=event_sink)  # 继续把流程往前推
 
         # 3.  当前有业务流程，但是当前业务流程某一步不缺点击的卡片
         if state.activated_task is not None:
-            return await self._task_handler.handle(state=state, commands=[])  # 让流程执行 不会像前推，而是会继续这一步流程
+            return await self._task_handler.handle(state=state, commands=[], event_sink=event_sink)  # 让流程执行 不会像前推，而是会继续这一步流程
 
         # 4. 当前业务流程没有
-        return await self._responder.respond(reason=ClarifyReason.OBJECT_REQUIRES_INTENT, state=state)
+        return await self._responder.respond(reason=ClarifyReason.OBJECT_REQUIRES_INTENT, state=state, event_sink=event_sink)
 
     def _try_resolve_set_slots_command(self,
                                        object: FocusedObject,
                                        state: DialogueState,
                                        flows_list: FlowsList
                                        ) -> SetSlotsCommand | None:
+        from atguigu.domain.object_slots import OBJECT_TYPE_TO_SLOT
 
-        if object.type == "order":
-            if self._is_build_set_slots_command("order_number", state, flows_list):
-                return SetSlotsCommand(command="set_slots", slots={"order_number": object.id})  # 订单号
-            return None
-
-        if object.type == "product":
-            if self._is_build_set_slots_command("product_id", state, flows_list):
-                return SetSlotsCommand(command="set_slots", slots={"product_id": object.id})  # 商品编号
-
-            return None
+        slot_name = OBJECT_TYPE_TO_SLOT.get(object.type)
+        if slot_name and self._is_build_set_slots_command(slot_name, state, flows_list):
+            return SetSlotsCommand(command="set_slots", slots={slot_name: object.id})
 
         return None
 

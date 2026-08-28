@@ -10,6 +10,7 @@ from atguigu.task.action.register import ActionRegister
 class ActionCall:
     action_name: str
     action_kwargs: dict[str, Any] = field(default_factory=dict)
+    advance_step_after: bool = False
 
 
 class ActionRunner:

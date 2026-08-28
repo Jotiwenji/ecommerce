@@ -15,12 +15,14 @@ from langchain_core.output_parsers import StrOutputParser
 class ClarifyResponder:
     async def respond(self,
                       reason: ClarifyReason,
-                      state: DialogueState) -> list[BotMessage]:
+                      state: DialogueState,
+                      event_sink=None) -> list[BotMessage]:
         """
         根据校验结果对象的原因码，利用LLM 来润色澄清回复
         Args:
             validated:
             state:
+            event_sink: 可选的流式事件回调
 
         Returns: list[BotMessage]
 
@@ -30,7 +32,7 @@ class ClarifyResponder:
         prompt_inputs = self._build_responder_prompt_inputs(reason, state)
 
         # 2. 格式化模版，调用LLM
-        bot_messages = await self._invoke(prompt_inputs)
+        bot_messages = await self._invoke(prompt_inputs, event_sink=event_sink)
 
         # 3. 返回
         return bot_messages
@@ -53,20 +55,18 @@ class ClarifyResponder:
             "reason": reason_str,
         }
 
-    async def _invoke(self, prompt_inputs: dict[str, Any]) -> list[BotMessage]:
+    async def _invoke(self, prompt_inputs: dict[str, Any], event_sink=None) -> list[BotMessage]:
         # 1. 加载提示词模版
         prompt_template_str = load_prompt_template("clarify_respond")
 
         # 2. 实例化提示词模版对象
         prompt_template = PromptTemplate.from_template(template=prompt_template_str, template_format="jinja2")
 
-        # 3. 构建chain
-        chain = prompt_template | llm_client | StrOutputParser()
+        # 3. 流式调用LLM（自动过滤think内容）
+        from atguigu.infrastructure.llm_streaming import stream_llm_text
+        result = await stream_llm_text(prompt_template, prompt_inputs, event_sink=event_sink)
 
-        # 4. 执行链
-        result = await  chain.ainvoke(prompt_inputs)
-
-        # 5. 返回结果
+        # 4. 返回结果
         return [BotMessage(text=result)]
 
 
@@ -82,20 +82,20 @@ class ClarifyResponder:
             return "请先发送你想咨询的对象，我再继续帮你看。"
 
         if reason is ClarifyReason.MISSING_KNOWLEDGE_INTENT:
-            return "你是想了解商品信息、订单信息，还是售后配送规则呢？"
+            return "你是想了解酒店、景点、交通信息，还是退改规则呢？"
 
         if reason is ClarifyReason.MISSING_TRACK:
-            return "你是想先处理业务问题，还是先咨询信息呢？"
+            return "你是想先办理业务，还是先咨询信息呢？"
 
         if reason is ClarifyReason.MISSING_TASK_COMMANDS:
-            return "你这次是想办理什么业务呢？比如查订单、查物流，或者申请退款。"
+            return "你这次是想办理什么业务呢？比如查酒店、查机票、查订单，或者申请退款。"
 
         if reason is ClarifyReason.OBJECT_REQUIRES_INTENT:
             focused_object = state.focused_object
             if focused_object is not None and focused_object.type == "order":
-                return "我已经收到这个订单了。你想查订单状态、查物流，还是申请退款呢？"
-            if focused_object is not None and focused_object.type == "product":
-                return "我已经收到这个商品了。你想了解它的商品信息、发货情况，还是售后相关问题呢？"
+                return "我已经收到这个订单了。你想查订单详情、申请退款，还是其他呢？"
+            if focused_object is not None and focused_object.type in ("hotel", "scenic_spot"):
+                return "我已经收到这个商品了。你想了解详情、价格，还是其他信息呢？"
 
         return "我还需要再确认一下你的意思，你可以换个更具体的说法告诉我。"
 

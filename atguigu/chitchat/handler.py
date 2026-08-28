@@ -10,5 +10,6 @@ class ChitChatHandler:
 
     async def handle(self,
                      chitchat: str,
-                     state: DialogueState) -> list[BotMessage]:
-        return await self._chat_responder.respond_chat(chitchat, state)
+                     state: DialogueState,
+                     event_sink=None) -> list[BotMessage]:
+        return await self._chat_responder.respond_chat(chitchat, state, event_sink=event_sink)

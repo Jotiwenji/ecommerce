@@ -15,7 +15,11 @@ from atguigu.knowledge.handler import KnowledgeHandler
 from atguigu.chitchat.handler import ChitChatHandler
 from atguigu.task.flows.loader import FlowLoader
 from atguigu.knowledge.intents import KNOWLEDGE_INTENTS
-from atguigu.knowledge.providers.knowledge import ApiOrderProvider,ApiProductProvider,FAQDefaultProvider,RAGDefaultProvider
+from atguigu.knowledge.providers.knowledge import TravelFAQProvider
+from atguigu.knowledge.faq_content import (
+    FAQ_HOTEL_POLICY, FAQ_SCENIC_POLICY, FAQ_FLIGHT_POLICY,
+    FAQ_TRAIN_POLICY, FAQ_PAYMENT, FAQ_DOCUMENT, FAQ_GENERAL,
+)
 
 PROJECT_ROOT_DIR = Path(__file__).resolve().parents[2]
 
@@ -40,10 +44,13 @@ def build_dialogue_engine():
         knowledge_handler=KnowledgeHandler(knowledge_intents=KNOWLEDGE_INTENTS,
                                            knowledge_responder=KnowledgeResponder(),
                                            providers_register= ProviderRegister(providers=[
-                                               ApiOrderProvider(),
-                                               ApiProductProvider(),
-                                               FAQDefaultProvider(),
-                                               RAGDefaultProvider()
+                                               TravelFAQProvider("faq.hotel_policy", FAQ_HOTEL_POLICY),
+                                               TravelFAQProvider("faq.scenic_policy", FAQ_SCENIC_POLICY),
+                                               TravelFAQProvider("faq.flight_policy", FAQ_FLIGHT_POLICY),
+                                               TravelFAQProvider("faq.train_policy", FAQ_TRAIN_POLICY),
+                                               TravelFAQProvider("faq.payment", FAQ_PAYMENT),
+                                               TravelFAQProvider("faq.document", FAQ_DOCUMENT),
+                                               TravelFAQProvider("faq.general", FAQ_GENERAL),
                                            ])
                                            ),
         chitchat_handler=ChitChatHandler(chat_responder=ChitChatResponder())

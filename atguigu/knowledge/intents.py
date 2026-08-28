@@ -1,5 +1,4 @@
-
-from  dataclasses  import  dataclass
+from dataclasses import dataclass
 
 
 @dataclass(slots=True)
@@ -7,42 +6,36 @@ class KnowledgeIntent:
     id: str
     description: str
     provider_ids: list[str]
-    requires_object:str  | None =None
+    requires_object: str | None = None
 
 
-
-# 系统支持的所有知识意图
 KNOWLEDGE_INTENTS: dict[str, KnowledgeIntent] = {
-    "product_info": KnowledgeIntent(
-        id="product_info", description="商品信息咨询",
-        provider_ids=["api.product"], requires_object="product",
+    "faq_hotel_policy": KnowledgeIntent(
+        id="faq_hotel_policy", description="酒店预订政策咨询（入住/退房/加床/取消规则）",
+        provider_ids=["faq.hotel_policy"],
     ),
-    "order_info": KnowledgeIntent(
-        id="order_info", description="订单信息咨询",
-        provider_ids=["api.order"], requires_object="order",
+    "faq_scenic_policy": KnowledgeIntent(
+        id="faq_scenic_policy", description="景点门票政策咨询（开放时间/儿童票/入园须知）",
+        provider_ids=["faq.scenic_policy"],
     ),
-    "refund_policy": KnowledgeIntent(
-        id="refund_policy", description="退款政策咨询",
-        provider_ids=["faq.default", "rag.default"],
+    "faq_flight_policy": KnowledgeIntent(
+        id="faq_flight_policy", description="机票退改签政策咨询",
+        provider_ids=["faq.flight_policy"],
     ),
-    "return_policy": KnowledgeIntent(
-        id="return_policy", description="退货政策咨询",
-        provider_ids=["faq.default", "rag.default"],
+    "faq_train_policy": KnowledgeIntent(
+        id="faq_train_policy", description="火车票退改/改签规则咨询",
+        provider_ids=["faq.train_policy"],
     ),
-    "shipping_policy": KnowledgeIntent(
-        id="shipping_policy", description="配送政策咨询",
-        provider_ids=["faq.default", "rag.default"],
+    "faq_payment": KnowledgeIntent(
+        id="faq_payment", description="支付与发票咨询",
+        provider_ids=["faq.payment"],
     ),
-    "platform_rule": KnowledgeIntent(
-        id="platform_rule", description="平台规则咨询",
-        provider_ids=["rag.default"],
+    "faq_document": KnowledgeIntent(
+        id="faq_document", description="出行人证件要求咨询",
+        provider_ids=["faq.document"],
     ),
-    "general_ecommerce_info": KnowledgeIntent(
-        id="general_ecommerce_info", description="电商通用信息咨询",
-        provider_ids=["faq.default", "rag.default"],
+    "faq_general": KnowledgeIntent(
+        id="faq_general", description="通用旅游FAQ",
+        provider_ids=["faq.general"],
     ),
 }
-
-
-
-

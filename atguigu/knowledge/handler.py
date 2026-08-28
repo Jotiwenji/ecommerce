@@ -18,7 +18,8 @@ class KnowledgeHandler:
 
     async def handle(self,
                      state: DialogueState,
-                     intents: list[str]) -> list[BotMessage]:
+                     intents: list[str],
+                     event_sink=None) -> list[BotMessage]:
         chunks = []
         # 1. 根据LLM提供的知识意图的id(intent),找提供者ID(provider_id)
 
@@ -33,7 +34,7 @@ class KnowledgeHandler:
             chunks.extend(chunk)
 
         # 4. 将从所有提供者查询获取到的结果给responder组件用
-        messages = await self._knowledge_responder.respond(chunks, state)
+        messages = await self._knowledge_responder.respond(chunks, state, event_sink=event_sink)
 
         return messages
 
